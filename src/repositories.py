@@ -71,8 +71,14 @@ class PetRepository(IRepository):
             cursor.execute("SELECT id, name, species, breed, age, client_id FROM pets WHERE client_id=?", (client_id,))
             return [Pet(*row) for row in cursor.fetchall()]
 
-    def update(self, item: Pet) -> bool: 
-        pass 
+    # src/repositories.py (dentro de la clase PetRepository)
+
+    def update(self, pet: Pet) -> bool: 
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE pets SET name=?, species=?, breed=?, age=?, client_id=? WHERE id=?", 
+                           (pet.name, pet.species, pet.breed, pet.age, pet.client_id, pet.id))
+            return cursor.rowcount > 0
 
     def delete(self, item_id: int) -> bool: 
         with self.db.get_connection() as conn:
@@ -94,12 +100,30 @@ class AppointmentRepository(IRepository):
             appt.id = cursor.lastrowid
             return appt
             
+    # src/repositories.py (dentro de la clase AppointmentRepository)
+
+    # ... (código anterior)
+
     def get_all(self) -> List[Appointment]:
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT id, pet_id, date, reason, status FROM appointments")
             return [Appointment(*row) for row in cursor.fetchall()]
 
-    def update(self, item: Any) -> bool: pass
-    def delete(self, item_id: int) -> bool: pass
+    def update(self, appt: Appointment) -> bool:
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE appointments SET pet_id=?, date=?, reason=?, status=? WHERE id=?",
+                           (appt.pet_id, appt.date, appt.reason, appt.status, appt.id))
+            return cursor.rowcount > 0
+            
+    def delete(self, item_id: int) -> bool:
+        """Elimina una cita por su ID."""
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            # Ejecuta la sentencia DELETE
+            cursor.execute("DELETE FROM appointments WHERE id=?", (item_id,))
+            # Devuelve True si se eliminó al menos una fila (rowcount > 0)
+            return cursor.rowcount > 0
+            
     def get_by_id(self, item_id: int) -> Any: pass
