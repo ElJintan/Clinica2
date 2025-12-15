@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import Mock, call
 from src.services import ClinicService
-from src.models import Client, Pet, Appointment
+from src.models import Client, Pet, Appointment, MedicalRecord
 from datetime import date
 
 # ----------------------------------------------------
@@ -18,18 +18,20 @@ class TestClinicService:
         self.mock_client_repo = Mock()
         self.mock_pet_repo = Mock()
         self.mock_appt_repo = Mock()
+        self.mock_mr_repo = Mock()
         
         self.service = ClinicService(
             self.mock_client_repo, 
             self.mock_pet_repo, 
-            self.mock_appt_repo
+            self.mock_appt_repo,
+            self.mock_mr_repo
         )
         
         # Objetos de modelo de prueba
         self.client_data = Client(id=1, name="Juan Test", email="juan@test.com", phone="123")
         self.pet_data = Pet(id=10, name="Fido", species="Perro", breed="Labrador", age=5, client_id=1)
         self.appt_data = Appointment(id=100, pet_id=10, date=date(2025, 12, 15), reason="Chequeo", status="Pendiente")
-
+        self.mr_data = MedicalRecord(id=1, appointment_id=100, diagnosis="Gripe felina", treatment="Antibiótico A", notes="Reposo 3 días")
 
     # ----------------------------------------------------
     # CLIENTE: Pruebas de Cliente (CRUD)
@@ -153,6 +155,8 @@ class TestClinicService:
         assert result is True
         self.mock_pet_repo.update.assert_called_once_with(updated_pet)
         
+  # tests/test_services.py (dentro de la sección # MASCOTA: Pruebas de Mascota)
+
     def test_update_pet_negative_age_raises_error_on_update(self):
         # Arrange
         # Un intento de actualización con una edad inválida
@@ -163,6 +167,29 @@ class TestClinicService:
             self.service.update_pet(bad_pet)
         # Se verifica que la capa de persistencia NO fue llamada
         self.mock_pet_repo.update.assert_not_called()
+        
+    # --- PRUEBAS DE BÚSQUEDA POR ID (PET) ---
+    def test_get_pet_by_id_found(self):
+        # Arrange
+        self.mock_pet_repo.get_by_id.return_value = self.pet_data
+        
+        # Act
+        result = self.service.get_pet_by_id(10)
+        
+        # Assert
+        assert result == self.pet_data
+        self.mock_pet_repo.get_by_id.assert_called_once_with(10)
+        
+    def test_get_pet_by_id_not_found(self):
+        # Arrange
+        self.mock_pet_repo.get_by_id.return_value = None
+        
+        # Act
+        result = self.service.get_pet_by_id(999)
+        
+        # Assert
+        assert result is None
+        self.mock_pet_repo.get_by_id.assert_called_once_with(999)
 
     def test_list_pets_by_client_returns_filtered_list(self):
         # Arrange
@@ -225,10 +252,6 @@ class TestClinicService:
         assert len(result) == 2
         assert result[0].pet_id == 10
         self.mock_appt_repo.get_all.assert_called_once()
-        
-        # tests/test_services.py (dentro de la clase TestClinicService)
-
-    # ... (código anterior)
 
     def test_update_appointment_success(self):
         # Arrange
@@ -294,6 +317,75 @@ class TestClinicService:
         # Assert
         assert result is False
         self.mock_appt_repo.delete.assert_called_once_with(appt_id_to_delete)
+
+    def test_get_appointment_by_id_found(self):
+        # Arrange
+        self.mock_appt_repo.get_by_id.return_value = self.appt_data
+        
+        # Act
+        result = self.service.get_appointment_by_id(100)
+        
+        # Assert
+        assert result == self.appt_data
+        self.mock_appt_repo.get_by_id.assert_called_once_with(100)
+        
+    def test_get_appointment_by_id_not_found(self):
+        # Arrange
+        self.mock_appt_repo.get_by_id.return_value = None
+        
+        # Act
+        result = self.service.get_appointment_by_id(999)
+        
+        # Assert
+        assert result is None
+        self.mock_appt_repo.get_by_id.assert_called_once_with(999)
+
+
+        # tests/test_services.py (después de las pruebas de Appointment)
+
+    # ----------------------------------------------------
+    # HISTORIAL MÉDICO: Pruebas de Registro Médico
+    # ----------------------------------------------------
+
+    def test_add_medical_record_success(self):
+        # Arrange
+        record_to_return = MedicalRecord(id=1, appointment_id=100, diagnosis="Gripe canina", treatment="Vacuna anual", notes="OK")
+        self.mock_mr_repo.create.return_value = record_to_return
+        
+        # Act
+        result = self.service.add_medical_record(
+            appointment_id=100, 
+            diagnosis="Gripe canina", 
+            treatment="Vacuna anual", 
+            notes="OK"
+        )
+        
+        # Assert
+        assert result.id == 1
+        assert result.diagnosis == "Gripe canina"
+        self.mock_mr_repo.create.assert_called_once()
+        
+   # tests/test_services.py (dentro de la clase TestClinicService, en la sección de Historial Médico)
+
+    # ... (código anterior)
+
+    def test_get_medical_history_by_pet_returns_list(self):
+        # Arrange
+        # Simulamos el retorno de la consulta JOIN
+        history_data = [
+            (2, date(2025, 12, 10), "Chequeo", "Sano", "Ninguno", None),
+            # CORRECCIÓN: Quitamos el 0 inicial en el mes y el día (01 -> 1)
+            (1, date(2025, 1, 1), "Vacuna", "OK", "Vacuna X", "Sin reacción") 
+        ]
+        self.mock_mr_repo.get_medical_history_by_pet.return_value = history_data
+        
+        # Act
+        result = self.service.get_medical_history_by_pet(pet_id=10)
+        
+        # Assert
+        assert len(result) == 2
+        assert result[0][3] == "Sano" # Diagnóstico del registro más reciente
+        self.mock_mr_repo.get_medical_history_by_pet.assert_called_once_with(10)
     # ----------------------------------------------------
     # SEED DATA (Prueba de inicialización de datos)
     # ----------------------------------------------------

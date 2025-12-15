@@ -1,6 +1,6 @@
-from typing import List, Optional, Any  # <--- Aquí faltaba añadir 'Any'
+from typing import List, Optional, Any  
 from src.interfaces import IRepository
-from src.models import Client, Pet, Appointment
+from src.models import Client, Pet, Appointment, MedicalRecord
 from src.database import DatabaseManager
 
 class ClientRepository(IRepository):
@@ -84,9 +84,14 @@ class PetRepository(IRepository):
         with self.db.get_connection() as conn:
             conn.execute("DELETE FROM pets WHERE id=?", (item_id,))
             return True
-            
+
     def get_by_id(self, item_id: int) -> Any: 
-        pass
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, name, species, breed, age, client_id FROM pets WHERE id=?", (item_id,))
+            row = cursor.fetchone()
+            # Retorna el objeto Pet si se encuentra, o None si no.
+            return Pet(*row) if row else None
 
 class AppointmentRepository(IRepository):
     def __init__(self, db: DatabaseManager):
@@ -99,10 +104,6 @@ class AppointmentRepository(IRepository):
                            (appt.pet_id, appt.date, appt.reason, appt.status))
             appt.id = cursor.lastrowid
             return appt
-            
-    # src/repositories.py (dentro de la clase AppointmentRepository)
-
-    # ... (código anterior)
 
     def get_all(self) -> List[Appointment]:
         with self.db.get_connection() as conn:
@@ -125,5 +126,46 @@ class AppointmentRepository(IRepository):
             cursor.execute("DELETE FROM appointments WHERE id=?", (item_id,))
             # Devuelve True si se eliminó al menos una fila (rowcount > 0)
             return cursor.rowcount > 0
+
+    def get_by_id(self, item_id: int) -> Any:
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, pet_id, date, reason, status FROM appointments WHERE id=?", (item_id,))
+            row = cursor.fetchone()
+            # Retorna el objeto Appointment si se encuentra, o None si no.
+            return Appointment(*row) if row else None
+
+
+class MedicalRecordRepository(IRepository):
+    def __init__(self, db: DatabaseManager):
+        self.db = db
+
+    def create(self, record: MedicalRecord) -> MedicalRecord:
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("INSERT INTO medical_records (appointment_id, diagnosis, treatment, notes) VALUES (?, ?, ?, ?)", 
+                           (record.appointment_id, record.diagnosis, record.treatment, record.notes))
+            record.id = cursor.lastrowid
+            return record
+
+    def get_medical_history_by_pet(self, pet_id: int) -> List[tuple]:
+        """Obtiene todos los registros médicos y datos de la cita para una mascota."""
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            query = """
+                SELECT 
+                    mr.id, a.date, a.reason, mr.diagnosis, mr.treatment, mr.notes
+                FROM medical_records mr
+                JOIN appointments a ON mr.appointment_id = a.id
+                WHERE a.pet_id = ?
+                ORDER BY a.date DESC
+            """
+            cursor.execute(query, (pet_id,))
+            # Retorna una lista de tuplas (id_registro, fecha_cita, motivo, diagnostico, tratamiento, notas)
+            return cursor.fetchall() 
             
+    # Métodos IRepository (Implementación mínima o 'pass')
+    def get_all(self) -> List[Any]: pass
+    def update(self, item: Any) -> bool: pass
+    def delete(self, item_id: int) -> bool: pass
     def get_by_id(self, item_id: int) -> Any: pass

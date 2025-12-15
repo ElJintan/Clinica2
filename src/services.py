@@ -1,13 +1,14 @@
-from typing import List
-from src.repositories import ClientRepository, PetRepository, AppointmentRepository
-from src.models import Client, Pet, Appointment
+from typing import List, Optional
+from src.repositories import ClientRepository, PetRepository, AppointmentRepository, MedicalRecordRepository
+from src.models import Client, Pet, Appointment, MedicalRecord
 from src.utils import logger, Validators
 
 class ClinicService:
-    def __init__(self, client_repo: ClientRepository, pet_repo: PetRepository, appt_repo: AppointmentRepository):
+    def __init__(self, client_repo: ClientRepository, pet_repo: PetRepository, appt_repo: AppointmentRepository, mr_repo: MedicalRecordRepository):
         self.client_repo = client_repo
         self.pet_repo = pet_repo
         self.appt_repo = appt_repo
+        self.mr_repo = mr_repo 
 
     # --- Client Logic ---
     def add_client(self, name: str, email: str, phone: str) -> Client:
@@ -37,7 +38,6 @@ class ClinicService:
         
     def delete_client(self, client_id: int):
         self.client_repo.delete(client_id)
-# ...
 
     # --- Pet Logic ---
     def add_pet(self, name: str, species: str, breed: str, age: int, client_id: int) -> Pet:
@@ -51,10 +51,12 @@ class ClinicService:
 
     def list_pets_by_client(self, client_id: int) -> List[Pet]:
         return self.pet_repo.get_by_client(client_id)
-    
-
-    def list_pets_by_client(self, client_id: int) -> List[Pet]:
-        return self.pet_repo.get_by_client(client_id)
+        
+    def get_pet_by_id(self, pet_id: int) -> Optional[Pet]:
+        return self.pet_repo.get_by_id(pet_id)
+        
+    def delete_pet(self, pet_id: int):
+        self.pet_repo.delete(pet_id)
         
     def update_pet(self, pet: Pet) -> bool:
         """Actualiza una mascota existente, valida la edad."""
@@ -70,8 +72,6 @@ class ClinicService:
     def delete_pet(self, pet_id: int):
         self.pet_repo.delete(pet_id)
 
-    # src/services.py (dentro de la clase ClinicService, después de book_appointment)
-
     # --- Appointment Logic ---
     def book_appointment(self, pet_id: int, date_val, reason: str):
         appt = Appointment(id=None, pet_id=pet_id, date=date_val, reason=reason)
@@ -80,11 +80,14 @@ class ClinicService:
     def update_appointment(self, appt: Appointment):
         """Actualiza una cita existente, valida la fecha."""
         if not Validators.is_valid_date(appt.date):
-            # La validación se aplica convirtiendo el objeto date a string (YYYY-MM-DD)
             raise ValueError("La fecha de la cita no es válida.") 
         return self.appt_repo.update(appt)
+
+    def get_appointment_by_id(self, appt_id: int) -> Optional[Appointment]:
+        return self.appt_repo.get_by_id(appt_id)
         
-    # src/services.py (dentro de la clase ClinicService, después de list_appointments)
+    def list_appointments(self):
+        return self.appt_repo.get_all()
 
     def list_appointments(self):
         return self.appt_repo.get_all()
@@ -92,6 +95,16 @@ class ClinicService:
     def delete_appointment(self, appt_id: int) -> bool:
         """Elimina una cita por su ID."""
         return self.appt_repo.delete(appt_id)
+    
+    # --- Medical Record Logic ---
+    def add_medical_record(self, appointment_id: int, diagnosis: str, treatment: str, notes: Optional[str] = None) -> MedicalRecord:
+        """Añade un registro médico a una cita existente."""
+        record = MedicalRecord(id=None, appointment_id=appointment_id, diagnosis=diagnosis, treatment=treatment, notes=notes)
+        return self.mr_repo.create(record)
+
+    def get_medical_history_by_pet(self, pet_id: int) -> List[tuple]:
+        """Obtiene el historial médico completo para una mascota."""
+        return self.mr_repo.get_medical_history_by_pet(pet_id)
         
     # --- Seed Data ---
     def seed_data(self):

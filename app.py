@@ -1,9 +1,9 @@
 import streamlit as st
 import pandas as pd
 from src.database import DatabaseManager
-from src.repositories import ClientRepository, PetRepository, AppointmentRepository
+from src.repositories import ClientRepository, PetRepository, AppointmentRepository, MedicalRecordRepository
 from src.services import ClinicService
-from src.models import Client, Pet, Appointment # Importamos los modelos
+from src.models import Client, Pet, Appointment, MedicalRecord # Aseguramos MedicalRecord esté aquí
 
 # --- Inyección de Dependencias (Composition Root) ---
 db = DatabaseManager()
@@ -12,7 +12,8 @@ db.initialize_db()
 client_repo = ClientRepository(db)
 pet_repo = PetRepository(db)
 appt_repo = AppointmentRepository(db)
-service = ClinicService(client_repo, pet_repo, appt_repo)
+mr_repo = MedicalRecordRepository(db)
+service = ClinicService(client_repo, pet_repo, appt_repo, mr_repo)
 
 # Carga datos de prueba si está vacío
 service.seed_data()
@@ -55,33 +56,35 @@ def show_home():
 def show_clients():
     st.header("Gestión de Clientes")
     
-    # --- Columna de Registro ---
-    with st.expander("➕ Registrar Nuevo Cliente"):
-        with st.form("new_client_form"):
-            name = st.text_input("Nombre Completo")
-            email = st.text_input("Email")
-            phone = st.text_input("Teléfono")
-            submitted = st.form_submit_button("Guardar")
-            if submitted:
-                try:
-                    service.add_client(name, email, phone)
-                    st.success("Cliente guardado correctamente")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Error: {e}")
-
     # Listado de clientes
     clients = service.list_clients()
     client_df = pd.DataFrame([vars(c) for c in clients])
     
-    col_list, col_actions = st.columns([2, 1])
+    col_register, col_actions = st.columns([1, 1])
 
-    with col_list:
+    with col_register:
+        # --- SECCIÓN REGISTRO ---
+        with st.expander("➕ Registrar Nuevo Cliente"):
+            with st.form("new_client_form"):
+                name = st.text_input("Nombre Completo")
+                email = st.text_input("Email")
+                phone = st.text_input("Teléfono")
+                submitted = st.form_submit_button("Guardar")
+                if submitted:
+                    try:
+                        service.add_client(name, email, phone)
+                        st.success("Cliente guardado correctamente")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+        
+        # --- LISTADO DE CLIENTES ---
         st.subheader("Listado de Clientes")
         if not clients:
             st.info("No hay clientes registrados.")
         else:
             st.dataframe(client_df, use_container_width=True)
+
 
     with col_actions:
         st.subheader("Acciones")
@@ -135,13 +138,16 @@ def show_clients():
 def show_pets():
     st.header("Gestión de Mascotas")
     
-    # Necesitamos clientes para asociar mascota
+    # Variables de inicio
     clients = service.list_clients()
     client_options = {c.name: c.id for c in clients}
+    client_id_to_name = {c.id: c.name for c in clients}
+    pets = service.list_pets()
     
-    col_register, col_actions = st.columns(2)
+    col_register, col_actions = st.columns([1, 1])
     
     with col_register:
+        # --- REGISTRO DE NUEVA MASCOTA ---
         with st.expander("➕ Registrar Nueva Mascota"):
             if not clients:
                 st.warning("Debes registrar un cliente primero.")
@@ -162,62 +168,127 @@ def show_pets():
                         except Exception as e:
                             st.error(f"Error: {e}")
 
-   # app.py (Corregido, alrededor de la línea 226)
-
-    pets = service.list_pets()
-    
-    # Mapeo de IDs de cliente a nombres de cliente
-    client_id_to_name = {c.id: c.name for c in clients}
-
-    # FILTRAR: Solo incluimos mascotas cuyo dueño (client_id) existe en la lista de clientes.
-    valid_pets = [p for p in pets if p.client_id in client_id_to_name]
-    
-    pet_df = pd.DataFrame([vars(p) for p in pets])
-    
-    with col_actions:
-        st.subheader("Listado de Mascotas")
+        # --- VISUALIZACIÓN DE HISTORIAL MÉDICO ---
+        st.subheader("Historial Médico")
         if not pets:
             st.info("No hay mascotas registradas.")
         else:
-            st.dataframe(pet_df, use_container_width=True)
+            pet_history_options = {f"{p.name} (ID: {p.id})": p for p in pets}
             
-            # --- SECCIÓN EDITAR MASCOTA ---
-            st.divider()
-            st.markdown("##### Editar Mascota")
+            # CLAVE ÚNICA APLICADA: view_history_select_key
+            pet_to_view_key = st.selectbox("Seleccionar Mascota para ver Historial", 
+                                           list(pet_history_options.keys()), 
+                                           key="view_history_select_key")
+            pet_to_view = pet_history_options[pet_to_view_key]
             
-            if not valid_pets:
-                st.warning("No hay mascotas con dueños válidos para editar.")
+            # Obtener el historial
+            history = service.get_medical_history_by_pet(pet_to_view.id)
+            
+            if history:
+                df_history = pd.DataFrame(history, columns=["ID Reg.", "Fecha Cita", "Motivo", "Diagnóstico", "Tratamiento", "Notas"])
+                st.dataframe(df_history, use_container_width=True)
             else:
-                pet_options = {f"{p.name} (ID: {p.id})": p for p in valid_pets}
+                st.info(f"'{pet_to_view.name}' no tiene historial médico registrado.")
+
+    # Columna de Acciones (Listado y Edición)
+    with col_actions:
+        st.subheader("Listado y Acciones")
+        
+        if not pets:
+            st.info("No hay mascotas registradas.")
+            return # Salir de la función si no hay mascotas
+        
+        # Listado
+        pet_df = pd.DataFrame([vars(p) for p in pets])
+        pet_df['Dueño'] = pet_df['client_id'].map(client_id_to_name)
+        st.dataframe(pet_df.drop(columns=['client_id']), use_container_width=True)
+        
+        # --- SECCIÓN AÑADIR REGISTRO MÉDICO ---
+        st.divider()
+        st.markdown("##### 📝 Añadir Registro Médico a una Cita")
+        
+        all_appts = service.list_appointments()
+        
+        # Filtramos citas que pertenezcan a la mascota seleccionada para el historial
+        available_appts = [
+            a for a in all_appts 
+            if a.pet_id == pet_to_view.id
+        ]
+
+        if available_appts:
+            # Opciones de citas para el selectbox
+            appt_options = {
+                f"ID {a.id} - {a.date} ({a.reason})": a.id 
+                for a in available_appts
+            }
+            
+            with st.form("new_medical_record_form"):
+                selected_appt_key = st.selectbox("Asociar a Cita", 
+                                                 list(appt_options.keys()), 
+                                                 key="record_appt_select")
+                appt_id = appt_options[selected_appt_key]
                 
-                pet_to_edit_key = st.selectbox("Seleccionar Mascota para editar", 
-                                               list(pet_options.keys()), 
-                                               key="edit_pet_select")
-                pet_to_edit = pet_options[pet_to_edit_key]
+                diagnosis = st.text_area("Diagnóstico Principal", height=100)
+                treatment = st.text_area("Tratamiento / Medicación", height=100)
+                notes = st.text_area("Notas Adicionales (Opcional)", height=50)
                 
-                # Obtener el nombre actual del dueño usando el mapeo
-                current_owner_name = client_id_to_name.get(pet_to_edit.client_id)
+                record_submitted = st.form_submit_button("Guardar Registro")
                 
-                # Encontrar el índice del dueño actual en la lista de selección
-                owner_names_list = list(client_options.keys())
+                if record_submitted:
+                    try:
+                        if not diagnosis or not treatment:
+                            st.error("Diagnóstico y Tratamiento son campos obligatorios.")
+                        else:
+                            service.add_medical_record(appt_id, diagnosis, treatment, notes)
+                            st.success(f"Registro médico añadido a Cita ID {appt_id}.")
+                            st.rerun()
+                    except Exception as e:
+                        st.error(f"Error al guardar registro: {e}")
+        else:
+            st.info(f"No hay citas para {pet_to_view.name} a las que se pueda añadir un registro.")
+        
+        # --- SECCIÓN EDITAR MASCOTA ---
+        st.divider()
+        st.markdown("##### Editar Mascota")
+        
+        valid_pets = [p for p in pets if p.client_id in client_id_to_name]
+        
+        if not valid_pets:
+            st.warning("No hay mascotas con dueños válidos para editar.")
+        else:
+            pet_options = {f"{p.name} (ID: {p.id})": p for p in valid_pets}
+            
+            # CLAVE ÚNICA APLICADA: edit_pet_select_key
+            pet_to_edit_key = st.selectbox("Seleccionar Mascota para editar", 
+                                           list(pet_options.keys()), 
+                                           key="edit_pet_select_key") 
+            pet_to_edit = pet_options[pet_to_edit_key]
+            
+            current_owner_name = client_id_to_name.get(pet_to_edit.client_id)
+            
+            owner_names_list = list(client_options.keys())
+            if current_owner_name in owner_names_list:
                 current_owner_index = owner_names_list.index(current_owner_name)
+            else:
+                current_owner_index = 0
+            
+            with st.form("edit_pet_form"):
+                st.markdown(f"**Editando ID:** {pet_to_edit.id}")
+                edit_name = st.text_input("Nombre Mascota", value=pet_to_edit.name)
+                
+                species_list = ["Perro", "Gato", "Ave", "Roedor", "Otro"]
+                current_species_index = species_list.index(pet_to_edit.species)
+                # CLAVE ÚNICA APLICADA: edit_species_select
+                edit_species = st.selectbox("Especie", species_list, index=current_species_index, key="edit_species_select")
+                
+                edit_breed = st.text_input("Raza", value=pet_to_edit.breed)
+                edit_age = st.number_input("Edad", min_value=0, value=pet_to_edit.age, step=1)
+                
+                # CLAVE ÚNICA APLICADA: edit_owner_select
+                edit_owner_name = st.selectbox("Dueño", owner_names_list, index=current_owner_index, key="edit_owner_select")
+                edit_client_id = client_options[edit_owner_name]
 
-                with st.form("edit_pet_form"):
-                    st.markdown(f"**Editando ID:** {pet_to_edit.id}")
-                    edit_name = st.text_input("Nombre Mascota", value=pet_to_edit.name)
-                    
-                    species_list = ["Perro", "Gato", "Ave", "Roedor", "Otro"]
-                    current_species_index = species_list.index(pet_to_edit.species)
-                    edit_species = st.selectbox("Especie", species_list, index=current_species_index)
-                    
-                    edit_breed = st.text_input("Raza", value=pet_to_edit.breed)
-                    edit_age = st.number_input("Edad", min_value=0, value=pet_to_edit.age, step=1)
-                    
-                    # Usar current_owner_index para establecer el valor inicial del selectbox del Dueño
-                    edit_owner_name = st.selectbox("Dueño", owner_names_list, index=current_owner_index)
-                    edit_client_id = client_options[edit_owner_name]
-
-                    edit_submitted = st.form_submit_button("Actualizar Mascota")
+                edit_submitted = st.form_submit_button("Actualizar Mascota")
                 
                 if edit_submitted:
                     try:
@@ -230,7 +301,7 @@ def show_pets():
                             st.error("Error al actualizar (mascota no encontrada).")
                     except Exception as e:
                         st.error(f"Error: {e}")
-            
+
 def show_calendar():
     st.header("📅 Calendario de Citas")
     
@@ -246,13 +317,14 @@ def show_calendar():
             st.warning("Debes registrar una mascota primero.")
         else:
             with st.form("appt_form"):
-                pet_name = st.selectbox("Mascota", list(pet_options.keys()))
+                pet_name = st.selectbox("Mascota", list(pet_options.keys()), key="appt_pet_select") # Added key
                 date_val = st.date_input("Fecha")
                 reason = st.text_area("Motivo de consulta")
                 submit = st.form_submit_button("Agendar")
                 
                 if submit:
                     try:
+                        # Aseguramos que date_val sea string en formato YYYY-MM-DD
                         service.book_appointment(pet_options[pet_name], str(date_val), reason)
                         st.success("Cita agendada")
                         st.rerun()
@@ -264,7 +336,6 @@ def show_calendar():
         if appts:
             # Transformar datos para visualización amigable
             data = []
-            appt_lookup = {a.id: a for a in appts}
             for a in appts:
                 # Buscar nombre de mascota (en app real esto se haría con un JOIN en SQL)
                 p_name = next((p.name for p in pets if p.id == a.pet_id), "Desconocido")
@@ -279,7 +350,8 @@ def show_calendar():
             # --- SECCIÓN ELIMINAR CITA ---
             st.markdown("##### Eliminar Cita")
             appt_id_options = [a.id for a in appts]
-            appt_id_to_delete = st.selectbox("Seleccionar ID de Cita para eliminar", appt_id_options, key="delete_appt_select")
+            # CLAVE ÚNICA APLICADA: delete_appt_select_key
+            appt_id_to_delete = st.selectbox("Seleccionar ID de Cita para eliminar", appt_id_options, key="delete_appt_select_key") 
             
             if st.button("🔴 Eliminar Cita", key="delete_appt_btn"):
                 success = service.delete_appointment(appt_id_to_delete)

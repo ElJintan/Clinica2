@@ -25,3 +25,11 @@ class Appointment:
     date: date
     reason: str
     status: str = "Pendiente"
+
+@dataclass
+class MedicalRecord:
+    id: Optional[int]
+    appointment_id: int
+    diagnosis: str
+    treatment: str
+    notes: Optional[str] = None

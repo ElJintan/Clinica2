@@ -52,6 +52,17 @@ class DatabaseManager:
                         FOREIGN KEY(pet_id) REFERENCES pets(id) ON DELETE CASCADE
                     )
                 ''')
+                # Tabla Historial Médico (NUEVA)
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS medical_records (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        appointment_id INTEGER,
+                        diagnosis TEXT NOT NULL,
+                        treatment TEXT NOT NULL,
+                        notes TEXT,
+                        FOREIGN KEY(appointment_id) REFERENCES appointments(id) ON DELETE CASCADE
+                    )
+                ''')
                 logger.info(f"Base de datos inicializada en: {self.db_name}")
         except Exception as e:
             logger.error(f"Error inicializando DB: {e}")
