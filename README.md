@@ -2,7 +2,7 @@
 
   <img src="banner_veterinaria.jpg" alt="Banner Clinica Veterinaria" width="100%" style="border-radius: 10px" />
 
-  # 🐾 Sistema de Gestión Clínica Veterinaria (Clinica2)
+  # 🐾 Sistema de Gestión Clínica Veterinaria 
 
   <p>
     <img src="https://img.shields.io/badge/Estado-En%20Desarrollo-green?style=for-the-badge" alt="Estado" />
