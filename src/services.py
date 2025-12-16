@@ -148,22 +148,7 @@ class ClinicService:
     def list_reviews(self) -> List[Review]:
         return self.review_repo.get_all()
     
-    # --- Seed Data ---
-    def seed_data(self):
-        from datetime import date
-        if not self.list_clients():
-            # Datos válidos para el seed
-            c1 = self.add_client("Juan Perez", "juan@example.com", "5551234")
-            c2 = self.add_client("Maria Lopez", "maria@example.com", "5555678")
-            
-            p1 = self.add_pet("Fido", "Perro", "Labrador", 5, c1.id)
-            p2 = self.add_pet("Michi", "Gato", "Siames", 2, c2.id)
-            
-            self.book_appointment(p1.id, date(2023, 12, 1), "Vacunación")
-            self.generate_invoice(c1.id, 75.00, date(2023, 12, 1))
-            self.add_review(c1.id, 5, "Excelente atención.")
-            logger.info("Datos de prueba insertados.")
-
+    
 # LOGIN
 
 # --- Añadir nueva clase AuthService ---
