@@ -1,6 +1,6 @@
 <div align="center">
 
-  <img src="docs/images/banner_veterinaria.jpg" alt="Banner Clinica Veterinaria" width="100%" style="border-radius: 10px" />
+  <img src="banner_veterinaria.jpg" alt="Banner Clinica Veterinaria" width="100%" style="border-radius: 10px" />
 
   # 🐾 Sistema de Gestión Clínica Veterinaria (Clinica2)
 
@@ -28,8 +28,6 @@
 ---
 
 ## 📸 Capturas de Pantalla
-
-*(Aquí pondrás imágenes de tu aplicación funcionando cuando apliquemos las mejoras)*
 
 | Dashboard Principal (Ejemplo) | Ficha de Mascota |
 |:---:|:---:|
