@@ -1,6 +1,6 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
-from datetime import date
+import datetime # Importar el módulo completo para evitar el error de recursión
 
 @dataclass
 class Client:
@@ -22,7 +22,7 @@ class Pet:
 class Appointment:
     id: Optional[int]
     pet_id: int
-    date: date
+    date: datetime.date # Usar datetime.date
     reason: str
     status: str = "Pendiente"
 
@@ -38,6 +38,14 @@ class MedicalRecord:
 class Invoice:
     id: Optional[int]
     client_id: int
-    date: date
+    date: datetime.date # Usar datetime.date
     total_amount: float
     status: str = "Pendiente"
+
+@dataclass
+class Review:
+    id: Optional[int]
+    client_id: int
+    rating: int # 1 to 5
+    comment: Optional[str] = None
+    date: datetime.date = field(default_factory=datetime.date.today) # Usar datetime.date.today

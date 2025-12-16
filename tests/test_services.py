@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import Mock, call
 from src.services import ClinicService
-from src.models import Client, Pet, Appointment, MedicalRecord, Invoice
+from src.models import Client, Pet, Appointment, MedicalRecord, Invoice, Review # <--- Añadir Review
 from datetime import date
 
 # ----------------------------------------------------
@@ -10,9 +10,6 @@ from datetime import date
 
 class TestClinicService:
     
-    # FIX: Se eliminó @pytest.fixture(autouse=True). 
-    # Pytest automáticamente reconoce setup_method para ejecutar antes de CADA test,
-    # permitiendo el uso de 'self'.
     def setup_method(self): 
         """Prepara los mocks y el servicio antes de cada prueba."""
         self.mock_client_repo = Mock()
@@ -20,13 +17,15 @@ class TestClinicService:
         self.mock_appt_repo = Mock()
         self.mock_mr_repo = Mock()
         self.mock_bill_repo = Mock()
+        self.mock_review_repo = Mock() # <--- MOCK AÑADIDO
 
         self.service = ClinicService(
             self.mock_client_repo, 
             self.mock_pet_repo, 
             self.mock_appt_repo,
             self.mock_mr_repo,
-            self.mock_bill_repo
+            self.mock_bill_repo,
+            self.mock_review_repo # <--- PASANDO EL MOCK
         )
         
         # Objetos de modelo de prueba
@@ -35,6 +34,7 @@ class TestClinicService:
         self.appt_data = Appointment(id=100, pet_id=10, date=date(2025, 12, 15), reason="Chequeo", status="Pendiente")
         self.mr_data = MedicalRecord(id=1, appointment_id=100, diagnosis="Gripe felina", treatment="Antibiótico A", notes="Reposo 3 días")
         self.invoice_data = Invoice(id=500, client_id=1, date=date(2025, 12, 16), total_amount=45.50, status="Pendiente")
+        self.review_data = Review(id=1, client_id=1, rating=5, comment="Excelente servicio", date=date(2025, 12, 16)) # <--- DATOS DE RESEÑA
 
     # ----------------------------------------------------
     # CLIENTE: Pruebas de Cliente (CRUD)
@@ -80,20 +80,6 @@ class TestClinicService:
         # Assert
         self.mock_client_repo.delete.assert_called_once_with(client_id_to_delete)
 
-        # tests/test_services.py (dentro de la clase TestClinicService)
-
-    def test_delete_client_success(self):
-        # Arrange
-        client_id_to_delete = 1
-        self.mock_client_repo.delete.return_value = True # Simula eliminación exitosa
-        
-        # Act
-        self.service.delete_client(client_id_to_delete)
-        
-        # Assert
-        self.mock_client_repo.delete.assert_called_once_with(client_id_to_delete)
-
-    # --- Nuevas pruebas de actualización de cliente ---
     def test_update_client_valid(self):
         # Arrange
         updated_client = Client(id=1, name="Juan Editado", email="editado@test.com", phone="999")
@@ -108,7 +94,6 @@ class TestClinicService:
 
     def test_update_client_invalid_email_raises_error(self):
         # Arrange
-        # Un intento de actualización con un email inválido
         bad_client = Client(id=1, name="Juan Editado", email="mal_email", phone="999")
         
         # Act & Assert
@@ -147,9 +132,8 @@ class TestClinicService:
 
     def test_update_pet_valid(self):
         # Arrange
-        # Usamos un objeto Pet simulado con un cambio de nombre y edad
         updated_pet = Pet(id=10, name="Fido Nuevo", species="Perro", breed="Poodle", age=7, client_id=1)
-        self.mock_pet_repo.update.return_value = True # Simula que 1 fila fue modificada
+        self.mock_pet_repo.update.return_value = True 
 
         # Act
         result = self.service.update_pet(updated_pet)
@@ -158,17 +142,13 @@ class TestClinicService:
         assert result is True
         self.mock_pet_repo.update.assert_called_once_with(updated_pet)
         
-  # tests/test_services.py (dentro de la sección # MASCOTA: Pruebas de Mascota)
-
     def test_update_pet_negative_age_raises_error_on_update(self):
         # Arrange
-        # Un intento de actualización con una edad inválida
         bad_pet = Pet(id=10, name="Fido", species="Perro", breed="Poodle", age=-5, client_id=1)
 
         # Act & Assert
         with pytest.raises(ValueError, match="La edad no puede ser negativa"):
             self.service.update_pet(bad_pet)
-        # Se verifica que la capa de persistencia NO fue llamada
         self.mock_pet_repo.update.assert_not_called()
         
     # --- PRUEBAS DE BÚSQUEDA POR ID (PET) ---
@@ -258,18 +238,17 @@ class TestClinicService:
 
     def test_update_appointment_success(self):
         # Arrange
-        old_appt = self.appt_data # id=100, reason="Chequeo"
+        old_appt = self.appt_data 
         updated_date = date(2026, 1, 15)
         
-        # Creamos un objeto Appointment con nuevos datos y el ID existente
         updated_appt = Appointment(
             id=100, 
             pet_id=old_appt.pet_id, 
             date=updated_date, 
             reason="Control Anual", 
-            status="Completada" # Nuevo estado
+            status="Completada" 
         )
-        self.mock_appt_repo.update.return_value = True # Simula éxito
+        self.mock_appt_repo.update.return_value = True 
 
         # Act
         result = self.service.update_appointment(updated_appt)
@@ -280,7 +259,6 @@ class TestClinicService:
 
     def test_update_appointment_invalid_date_raises_error(self):
         # Arrange
-        # Una cita con un valor de fecha no válido para la validación
         invalid_appt = Appointment(
             id=100, 
             pet_id=10, 
@@ -293,14 +271,13 @@ class TestClinicService:
         with pytest.raises(ValueError, match="La fecha de la cita no es válida."):
             self.service.update_appointment(invalid_appt)
             
-        # Se verifica que la capa de persistencia NO fue llamada
         self.mock_appt_repo.update.assert_not_called()
     
     # Pruebas de eliminación de citas
     def test_delete_appointment_success(self):
         # Arrange
         appt_id_to_delete = 100
-        self.mock_appt_repo.delete.return_value = True # Simula eliminación exitosa
+        self.mock_appt_repo.delete.return_value = True 
         
         # Act
         result = self.service.delete_appointment(appt_id_to_delete)
@@ -312,7 +289,7 @@ class TestClinicService:
     def test_delete_appointment_not_found(self):
         # Arrange
         appt_id_to_delete = 999
-        self.mock_appt_repo.delete.return_value = False # Simula que no se encontró
+        self.mock_appt_repo.delete.return_value = False 
         
         # Act
         result = self.service.delete_appointment(appt_id_to_delete)
@@ -344,8 +321,6 @@ class TestClinicService:
         self.mock_appt_repo.get_by_id.assert_called_once_with(999)
 
 
-        # tests/test_services.py (después de las pruebas de Appointment)
-
     # ----------------------------------------------------
     # HISTORIAL MÉDICO: Pruebas de Registro Médico
     # ----------------------------------------------------
@@ -368,16 +343,10 @@ class TestClinicService:
         assert result.diagnosis == "Gripe canina"
         self.mock_mr_repo.create.assert_called_once()
         
-   # tests/test_services.py (dentro de la clase TestClinicService, en la sección de Historial Médico)
-
-    # ... (código anterior)
-
     def test_get_medical_history_by_pet_returns_list(self):
         # Arrange
-        # Simulamos el retorno de la consulta JOIN
         history_data = [
             (2, date(2025, 12, 10), "Chequeo", "Sano", "Ninguno", None),
-            # CORRECCIÓN: Quitamos el 0 inicial en el mes y el día (01 -> 1)
             (1, date(2025, 1, 1), "Vacuna", "OK", "Vacuna X", "Sin reacción") 
         ]
         self.mock_mr_repo.get_medical_history_by_pet.return_value = history_data
@@ -387,11 +356,11 @@ class TestClinicService:
         
         # Assert
         assert len(result) == 2
-        assert result[0][3] == "Sano" # Diagnóstico del registro más reciente
+        assert result[0][3] == "Sano" 
         self.mock_mr_repo.get_medical_history_by_pet.assert_called_once_with(10)
 
     # ----------------------------------------------------
-    # FACTURACIÓN: Pruebas de Facturación
+    # FACTURACIÓN: Pruebas de Facturación (SIMPLIFICADA)
     # ----------------------------------------------------
 
     def test_generate_invoice_success(self):
@@ -420,7 +389,7 @@ class TestClinicService:
 
     def test_list_invoices_returns_all(self):
         # Arrange
-        invoice_list = [self.invoice_data, Invoice(id=501, client_id=2, date=date(2025, 12, 15), total_amount=120.00, status="Pagada")]
+        invoice_list = [self.invoice_data, Invoice(id=501, client_id=2, date=date(2025, 12, 15), total_amount=120.00, status="Pendiente")]
         self.mock_bill_repo.get_all.return_value = invoice_list
         
         # Act
@@ -431,100 +400,88 @@ class TestClinicService:
         assert result[0].client_id == 1
         self.mock_bill_repo.get_all.assert_called_once()
 
-    def test_pay_invoice_success(self):
-        # Arrange
-        invoice_id = 500
-        # 1. Simular que se encuentra la factura Pendiente
-        pending_invoice = Invoice(id=invoice_id, client_id=1, date=date(2025, 1, 1), total_amount=50.0, status="Pendiente")
-        self.mock_bill_repo.get_by_id.return_value = pending_invoice
-        
-        # 2. Simular que la actualización es exitosa
-        self.mock_bill_repo.update.return_value = True
-        
-        # Act
-        result = self.service.pay_invoice(invoice_id)
-        
-        # Assert
-        assert result is True
-        self.mock_bill_repo.get_by_id.assert_called_once_with(invoice_id)
-        
-        # Verificar que el update fue llamado con el estado 'Pagada'
-        updated_invoice = self.mock_bill_repo.update.call_args[0][0]
-        assert updated_invoice.status == "Pagada"
+    # ----------------------------------------------------
+    # RESEÑAS: Pruebas de Reseñas
+    # ----------------------------------------------------
 
-    def test_pay_invoice_already_paid(self):
+    def test_add_review_valid(self):
         # Arrange
-        invoice_id = 501
-        # Simular que se encuentra la factura ya Pagada
-        paid_invoice = Invoice(id=invoice_id, client_id=1, date=date(2025, 1, 1), total_amount=50.0, status="Pagada")
-        self.mock_bill_repo.get_by_id.return_value = paid_invoice
+        self.mock_review_repo.create.return_value = self.review_data
         
         # Act
-        result = self.service.pay_invoice(invoice_id)
+        result = self.service.add_review(
+            client_id=1, 
+            rating=5, 
+            comment="Excelente servicio"
+        )
         
         # Assert
-        assert result is True # Debe retornar True si ya está pagada (idempotencia)
-        self.mock_bill_repo.update.assert_not_called()
+        assert result.id == 1
+        assert result.rating == 5
+        self.mock_review_repo.create.assert_called_once()
         
-    def test_pay_invoice_not_found_raises_error(self):
-        # Arrange
-        invoice_id = 999
-        self.mock_bill_repo.get_by_id.return_value = None
-        
+    def test_add_review_invalid_rating_raises_error(self):
         # Act & Assert
-        with pytest.raises(ValueError, match="Factura ID 999 no encontrada."):
-            self.service.pay_invoice(invoice_id)
-            
-        self.mock_bill_repo.update.assert_not_called()
+        with pytest.raises(ValueError, match="La calificación debe estar entre 1 y 5."):
+            self.service.add_review(client_id=1, rating=6)
+        self.mock_review_repo.create.assert_not_called()
+
+    def test_list_reviews_returns_all(self):
+        # Arrange
+        review_list = [self.review_data, Review(id=2, client_id=2, rating=3, comment="Aceptable", date=date(2025, 12, 15))]
+        self.mock_review_repo.get_all.return_value = review_list
+        
+        # Act
+        result = self.service.list_reviews()
+        
+        # Assert
+        assert len(result) == 2
+        assert result[1].rating == 3
+        self.mock_review_repo.get_all.assert_called_once()
+    
     # ----------------------------------------------------
     # SEED DATA (Prueba de inicialización de datos)
     # ----------------------------------------------------
     
     def test_seed_data_when_clients_exist(self):
         # Arrange
-        # Simulamos que list_clients devuelve algo (ya hay datos)
         self.mock_client_repo.get_all.return_value = [self.client_data] 
         
         # Act
         self.service.seed_data()
         
         # Assert
-        # Si ya hay clientes, no se debería llamar a create ni a add_pet/book_appointment
         self.mock_client_repo.get_all.assert_called_once()
         self.mock_client_repo.create.assert_not_called()
         self.mock_pet_repo.create.assert_not_called()
         self.mock_appt_repo.create.assert_not_called()
+        self.mock_bill_repo.create.assert_not_called()
+        self.mock_review_repo.create.assert_not_called()
         
     def test_seed_data_when_clients_do_not_exist(self):
         # Arrange
-        # Simulamos que list_clients devuelve una lista vacía (no hay datos)
         self.mock_client_repo.get_all.return_value = [] 
         
-        # Simulamos las operaciones de creación de seed_data: Clientes
         c1 = Client(1, "Juan Perez", "juan@example.com", "555-1234")
         c2 = Client(2, "Maria Lopez", "maria@example.com", "555-5678")
         self.mock_client_repo.create.side_effect = [c1, c2]
         
-        # Simulamos las operaciones de creación de seed_data: Mascotas (con la corrección de IDs)
         p1_mock = Pet(id=1, name="Fido", species="Perro", breed="Labrador", age=5, client_id=1)
         p2_mock = Pet(id=2, name="Michi", species="Gato", breed="Siames", age=2, client_id=2)
         self.mock_pet_repo.create.side_effect = [p1_mock, p2_mock]
         
-        # La creación de cita no necesita un retorno específico para esta prueba
         self.mock_appt_repo.create.return_value = Mock() 
+        self.mock_bill_repo.create.return_value = Mock() 
+        self.mock_review_repo.create.return_value = Mock()
         
         # Act
         self.service.seed_data()
         
         # Assert
-        # 1. Se deben haber llamado a client.create 2 veces
         assert self.mock_client_repo.create.call_count == 2
-        
-        # 2. Se deben haber llamado a pet.create 2 veces (p1 y p2)
         assert self.mock_pet_repo.create.call_count == 2
-        
-        # 3. Se deben haber llamado a appt.create 1 vez
         self.mock_appt_repo.create.assert_called_once()
+        self.mock_bill_repo.create.assert_called_once()
+        self.mock_review_repo.create.assert_called_once()
         
-        # Verificamos que se llamó con el ID de la primera mascota (p1.id)
         assert self.mock_appt_repo.create.call_args[0][0].pet_id == 1

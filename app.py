@@ -1,9 +1,9 @@
 import streamlit as st
 import pandas as pd
 from src.database import DatabaseManager
-from src.repositories import ClientRepository, PetRepository, AppointmentRepository, MedicalRecordRepository, BillingRepository
+from src.repositories import ClientRepository, PetRepository, AppointmentRepository, MedicalRecordRepository, BillingRepository, ReviewRepository # <--- AÑADIDO ReviewRepository
 from src.services import ClinicService
-from src.models import Client, Pet, Appointment, MedicalRecord, Invoice 
+from src.models import Client, Pet, Appointment, MedicalRecord, Invoice, Review # <--- AÑADIDO Review
 from datetime import date
 
 # --- Inyección de Dependencias (Composition Root) ---
@@ -15,7 +15,10 @@ pet_repo = PetRepository(db)
 appt_repo = AppointmentRepository(db)
 mr_repo = MedicalRecordRepository(db)
 bill_repo = BillingRepository(db)
-service = ClinicService(client_repo, pet_repo, appt_repo, mr_repo, bill_repo)
+review_repo = ReviewRepository(db) # <--- INICIALIZACIÓN AÑADIDA
+
+# Asegurarse de que todos los 6 repositorios se pasen al servicio:
+service = ClinicService(client_repo, pet_repo, appt_repo, mr_repo, bill_repo, review_repo)
 
 # Carga datos de prueba si está vacío
 service.seed_data()
@@ -26,7 +29,7 @@ st.set_page_config(page_title="VetManager Pro", layout="wide", page_icon="🐾")
 # --- UI Styling & Estructura ---
 def main():
     st.sidebar.title("🐾 VetManager")
-    menu = st.sidebar.radio("Navegación", ["Inicio", "Clientes", "Mascotas", "Calendario & Citas", "Facturación"])
+    menu = st.sidebar.radio("Navegación", ["Inicio", "Clientes", "Mascotas", "Calendario & Citas", "Facturación", "Reseñas"]) # <--- AÑADIDO Reseñas
 
     if menu == "Inicio":
         show_home()
@@ -36,8 +39,10 @@ def main():
         show_pets()
     elif menu == "Calendario & Citas":
         show_calendar()
-    elif menu == "Facturación": # <--- NUEVA OPCIÓN
+    elif menu == "Facturación":
         show_billing()
+    elif menu == "Reseñas": # <--- NUEVA OPCIÓN
+        show_reviews()
 
 def show_home():
     st.title("Bienvenido a VetManager Pro")
@@ -200,7 +205,7 @@ def show_pets():
         
         if not pets:
             st.info("No hay mascotas registradas.")
-            return # Salir de la función si no hay mascotas
+            return 
         
         # Listado
         pet_df = pd.DataFrame([vars(p) for p in pets])
@@ -328,8 +333,7 @@ def show_calendar():
                 
                 if submit:
                     try:
-                        # Aseguramos que date_val sea string en formato YYYY-MM-DD
-                        service.book_appointment(pet_options[pet_name], str(date_val), reason)
+                        service.book_appointment(pet_options[pet_name], date_val, reason)
                         st.success("Cita agendada")
                         st.rerun()
                     except Exception as e:
@@ -394,8 +398,7 @@ def show_billing():
                 
                 if submitted:
                     try:
-                        # Convertimos la fecha a string para la capa de servicio
-                        service.generate_invoice(client_id, total_amount, str(invoice_date)) 
+                        service.generate_invoice(client_id, total_amount, invoice_date) 
                         st.success(f"Factura generada para {client_name_key}.")
                         st.rerun()
                     except Exception as e:
@@ -410,58 +413,70 @@ def show_billing():
             df = pd.DataFrame(data)
             
             # Añadir nombre del cliente para visualización
-            client_id_to_name = {c.id: c.name for c in clients} # Aseguramos que este mapeo esté disponible
             df['Cliente'] = df['client_id'].map(client_id_to_name)
             
-            # Formato de tabla y colores
+            # Formato de tabla
             df = df.drop(columns=['client_id']).rename(columns={'id': 'ID', 'date': 'Fecha', 'total_amount': 'Monto', 'status': 'Estado'})
             
-            def color_status(val):
-                color = 'lightgreen' if val == 'Pagada' else 'red'
-                return f'background-color: {color}'
-
-            st.dataframe(
-                df.style.applymap(color_status, subset=['Estado']),
-                use_container_width=True
-            )
+            st.dataframe(df, use_container_width=True)
             
-            st.divider()
-            st.subheader("Acciones de Facturación")
-            
-            # --- SECCIÓN PAGAR FACTURA ---
-            # CORRECCIÓN: Usar i['ID'] en lugar de i.ID
-            invoice_id_options = [str(i['ID']) for i in df[df['Estado'] == "Pendiente"].to_dict('records')] 
-            
-            if invoice_id_options:
-                with st.form("pay_invoice_form"):
-                    # El valor devuelto por el selectbox será una string (e.g., "2")
-                    invoice_to_pay_id_str = st.selectbox("Seleccionar ID de Factura a Pagar", 
-                                                         invoice_id_options, 
-                                                         key="pay_invoice_select")
-                    
-                    if st.form_submit_button("✅ Marcar como Pagada"):
-                        try:
-                            # Convertimos la string a int justo antes de llamar al servicio
-                            invoice_id_int = int(invoice_to_pay_id_str) 
-                            
-                            success = service.pay_invoice(invoice_id_int)
-                            
-                            if success:
-                                st.success(f"Factura ID {invoice_id_int} marcada como PAGADA.")
-                                st.rerun()
-                            else:
-                                st.error("Error al actualizar el estado de la factura (Puede que ya estuviera pagada, intente recargar).")
-                        
-                        # 3. Capturamos el error específico de la capa de servicio (ValueError)
-                        except ValueError as ve:
-                            st.error(f"Error: {ve}") # Esto mostrará "Factura ID 2 no encontrada."
-                        except Exception as e:
-                            st.error(f"Error desconocido: {e}")
-            else:
-                st.info("No hay facturas pendientes de pago.")
-                
         else:
             st.info("No hay facturas emitidas.")
+
+def show_reviews():
+    st.header("⭐ Gestión de Reseñas y Feedback")
+    
+    clients = service.list_clients()
+    client_options = {f"{c.name} (ID: {c.id})": c.id for c in clients}
+    client_id_to_name = {c.id: c.name for c in clients}
+    
+    col_submit, col_list = st.columns([1, 2])
+    
+    with col_submit:
+        st.subheader("Enviar Reseña")
+        if not clients:
+            st.warning("Debes registrar clientes para enviar reseñas.")
+        else:
+            with st.form("new_review_form"):
+                client_name_key = st.selectbox("Cliente que envía la reseña", list(client_options.keys()), key="review_client_select")
+                client_id = client_options[client_name_key]
+                
+                rating = st.slider("Calificación", 1, 5, 5, key="review_rating")
+                comment = st.text_area("Comentario", key="review_comment")
+                
+                submitted = st.form_submit_button("Enviar Feedback")
+                
+                if submitted:
+                    try:
+                        service.add_review(client_id, rating, comment) 
+                        st.success(f"Reseña enviada por {client_name_key}.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error al enviar reseña: {e}")
+                        
+    with col_list:
+        st.subheader("Reseñas Recibidas")
+        reviews = service.list_reviews()
+        
+        if reviews:
+            data = [vars(r) for r in reviews]
+            df = pd.DataFrame(data)
+            
+            df['Cliente'] = df['client_id'].map(client_id_to_name)
+            
+            df = df.drop(columns=['client_id']).rename(columns={'id': 'ID', 'rating': 'Calificación', 'comment': 'Comentario', 'date': 'Fecha'})
+            
+            # Mostrar calificación con estrellas
+            df['Calificación'] = df['Calificación'].apply(lambda x: "⭐" * x)
+
+            st.dataframe(df, use_container_width=True)
+            
+            # Cálculo de promedio
+            avg_rating = sum(r.rating for r in reviews) / len(reviews)
+            st.markdown(f"**Promedio General:** {avg_rating:.2f} / 5")
+
+        else:
+            st.info("No hay reseñas registradas.")
 
 if __name__ == "__main__":
     main()

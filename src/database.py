@@ -75,7 +75,16 @@ class DatabaseManager:
                         FOREIGN KEY(client_id) REFERENCES clients(id) ON DELETE CASCADE
                     )
                 ''')
-                
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS reviews (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        client_id INTEGER,
+                        rating INTEGER NOT NULL,
+                        comment TEXT,
+                        review_date DATE NOT NULL,
+                        FOREIGN KEY(client_id) REFERENCES clients(id) ON DELETE CASCADE
+                    )
+                ''')
                 logger.info(f"Base de datos inicializada en: {self.db_name}")
         except Exception as e:
             logger.error(f"Error inicializando DB: {e}")
