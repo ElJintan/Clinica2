@@ -7,7 +7,6 @@ class DatabaseManager:
     
     def __init__(self, db_name="veterinaria_final.db"):
         # Construimos la ruta absoluta para evitar ambigüedades
-        # Esto asegura que se cree en /app/veterinaria_final.db dentro del contenedor
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.db_name = os.path.join(base_dir, db_name)
 
@@ -20,7 +19,8 @@ class DatabaseManager:
         try:
             with self.get_connection() as conn:
                 cursor = conn.cursor()
-                # Tabla Clientes
+                
+                # --- Tabla Clientes ---
                 cursor.execute('''
                     CREATE TABLE IF NOT EXISTS clients (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -29,7 +29,8 @@ class DatabaseManager:
                         phone TEXT NOT NULL
                     )
                 ''')
-                # Tabla Mascotas
+                
+                # --- Tabla Mascotas ---
                 cursor.execute('''
                     CREATE TABLE IF NOT EXISTS pets (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -41,7 +42,8 @@ class DatabaseManager:
                         FOREIGN KEY(client_id) REFERENCES clients(id) ON DELETE CASCADE
                     )
                 ''')
-                # Tabla Citas
+                
+                # --- Tabla Citas ---
                 cursor.execute('''
                     CREATE TABLE IF NOT EXISTS appointments (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -52,7 +54,8 @@ class DatabaseManager:
                         FOREIGN KEY(pet_id) REFERENCES pets(id) ON DELETE CASCADE
                     )
                 ''')
-                # Tabla Historial Médico (NUEVA)
+                
+                # --- Tabla Historial Médico ---
                 cursor.execute('''
                     CREATE TABLE IF NOT EXISTS medical_records (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -64,7 +67,7 @@ class DatabaseManager:
                     )
                 ''')
 
-                # Tabla Facturas (NUEVA)
+                # --- Tabla Facturas ---
                 cursor.execute('''
                     CREATE TABLE IF NOT EXISTS invoices (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -75,6 +78,8 @@ class DatabaseManager:
                         FOREIGN KEY(client_id) REFERENCES clients(id) ON DELETE CASCADE
                     )
                 ''')
+                
+                # --- Tabla Reseñas ---
                 cursor.execute('''
                     CREATE TABLE IF NOT EXISTS reviews (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -85,7 +90,19 @@ class DatabaseManager:
                         FOREIGN KEY(client_id) REFERENCES clients(id) ON DELETE CASCADE
                     )
                 ''')
+
+                # --- Tabla Usuarios (LOGIN) ---
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS users (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        username TEXT UNIQUE NOT NULL,
+                        password_hash TEXT NOT NULL,
+                        role TEXT DEFAULT 'admin'
+                    )
+                """)
+
                 logger.info(f"Base de datos inicializada en: {self.db_name}")
+                
         except Exception as e:
             logger.error(f"Error inicializando DB: {e}")
             raise

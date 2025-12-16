@@ -4,6 +4,7 @@ from src.models import Client, Pet, Appointment, MedicalRecord, Invoice, Review 
 from src.database import DatabaseManager
 from src.utils import logger
 from datetime import date, datetime # <--- Importar datetime para conversión
+from src.models import User # Añadir User a los imports
 
 # --- Client Repository ---
 class ClientRepository(IRepository):
@@ -225,6 +226,33 @@ class ReviewRepository(IRepository):
                 reviews.append(Review(row[0], row[1], row[2], row[3], date_obj))
             return reviews
             
+    def update(self, item: Any) -> bool: return False
+    def delete(self, item_id: int) -> bool: return False
+    def get_by_id(self, item_id: int) -> Any: return None
+
+    #Login
+
+class UserRepository(IRepository):
+    def __init__(self, db: DatabaseManager):
+        self.db = db
+
+    def create(self, user: User) -> User:
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)", 
+                           (user.username, user.password_hash, user.role))
+            user.id = cursor.lastrowid
+            return user
+
+    def get_by_username(self, username: str) -> Optional[User]:
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, username, password_hash, role FROM users WHERE username = ?", (username,))
+            row = cursor.fetchone()
+            return User(*row) if row else None
+
+    # Métodos de la interfaz (pueden dejarse básicos o implementar si se requiere gestión de usuarios)
+    def get_all(self) -> List[Any]: return []
     def update(self, item: Any) -> bool: return False
     def delete(self, item_id: int) -> bool: return False
     def get_by_id(self, item_id: int) -> Any: return None

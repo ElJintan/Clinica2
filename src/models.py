@@ -49,3 +49,14 @@ class Review:
     rating: int # 1 to 5
     comment: Optional[str] = None
     date: datetime.date = field(default_factory=datetime.date.today) # Usar datetime.date.today
+
+    #LOGIN USUARIO
+
+    # Añadir al final de src/models.py
+
+@dataclass
+class User:
+    id: Optional[int]
+    username: str
+    password_hash: str
+    role: str = "admin"
