@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import Mock, call
 from src.services import ClinicService
-from src.models import Client, Pet, Appointment, MedicalRecord
+from src.models import Client, Pet, Appointment, MedicalRecord, Invoice
 from datetime import date
 
 # ----------------------------------------------------
@@ -19,12 +19,14 @@ class TestClinicService:
         self.mock_pet_repo = Mock()
         self.mock_appt_repo = Mock()
         self.mock_mr_repo = Mock()
-        
+        self.mock_bill_repo = Mock()
+
         self.service = ClinicService(
             self.mock_client_repo, 
             self.mock_pet_repo, 
             self.mock_appt_repo,
-            self.mock_mr_repo
+            self.mock_mr_repo,
+            self.mock_bill_repo
         )
         
         # Objetos de modelo de prueba
@@ -32,6 +34,7 @@ class TestClinicService:
         self.pet_data = Pet(id=10, name="Fido", species="Perro", breed="Labrador", age=5, client_id=1)
         self.appt_data = Appointment(id=100, pet_id=10, date=date(2025, 12, 15), reason="Chequeo", status="Pendiente")
         self.mr_data = MedicalRecord(id=1, appointment_id=100, diagnosis="Gripe felina", treatment="Antibiótico A", notes="Reposo 3 días")
+        self.invoice_data = Invoice(id=500, client_id=1, date=date(2025, 12, 16), total_amount=45.50, status="Pendiente")
 
     # ----------------------------------------------------
     # CLIENTE: Pruebas de Cliente (CRUD)
@@ -386,6 +389,93 @@ class TestClinicService:
         assert len(result) == 2
         assert result[0][3] == "Sano" # Diagnóstico del registro más reciente
         self.mock_mr_repo.get_medical_history_by_pet.assert_called_once_with(10)
+
+    # ----------------------------------------------------
+    # FACTURACIÓN: Pruebas de Facturación
+    # ----------------------------------------------------
+
+    def test_generate_invoice_success(self):
+        # Arrange
+        test_date = date(2025, 12, 16)
+        self.mock_bill_repo.create.return_value = self.invoice_data
+        
+        # Act
+        result = self.service.generate_invoice(
+            client_id=1, 
+            total_amount=45.50, 
+            date_val=test_date
+        )
+        
+        # Assert
+        assert result.id == 500
+        assert result.total_amount == 45.50
+        assert result.status == "Pendiente"
+        self.mock_bill_repo.create.assert_called_once()
+        
+    def test_generate_invoice_negative_amount_raises_error(self):
+        # Act & Assert
+        with pytest.raises(ValueError, match="El monto total debe ser positivo."):
+            self.service.generate_invoice(client_id=1, total_amount=-10.00, date_val=date(2025, 1, 1))
+        self.mock_bill_repo.create.assert_not_called()
+
+    def test_list_invoices_returns_all(self):
+        # Arrange
+        invoice_list = [self.invoice_data, Invoice(id=501, client_id=2, date=date(2025, 12, 15), total_amount=120.00, status="Pagada")]
+        self.mock_bill_repo.get_all.return_value = invoice_list
+        
+        # Act
+        result = self.service.list_invoices()
+        
+        # Assert
+        assert len(result) == 2
+        assert result[0].client_id == 1
+        self.mock_bill_repo.get_all.assert_called_once()
+
+    def test_pay_invoice_success(self):
+        # Arrange
+        invoice_id = 500
+        # 1. Simular que se encuentra la factura Pendiente
+        pending_invoice = Invoice(id=invoice_id, client_id=1, date=date(2025, 1, 1), total_amount=50.0, status="Pendiente")
+        self.mock_bill_repo.get_by_id.return_value = pending_invoice
+        
+        # 2. Simular que la actualización es exitosa
+        self.mock_bill_repo.update.return_value = True
+        
+        # Act
+        result = self.service.pay_invoice(invoice_id)
+        
+        # Assert
+        assert result is True
+        self.mock_bill_repo.get_by_id.assert_called_once_with(invoice_id)
+        
+        # Verificar que el update fue llamado con el estado 'Pagada'
+        updated_invoice = self.mock_bill_repo.update.call_args[0][0]
+        assert updated_invoice.status == "Pagada"
+
+    def test_pay_invoice_already_paid(self):
+        # Arrange
+        invoice_id = 501
+        # Simular que se encuentra la factura ya Pagada
+        paid_invoice = Invoice(id=invoice_id, client_id=1, date=date(2025, 1, 1), total_amount=50.0, status="Pagada")
+        self.mock_bill_repo.get_by_id.return_value = paid_invoice
+        
+        # Act
+        result = self.service.pay_invoice(invoice_id)
+        
+        # Assert
+        assert result is True # Debe retornar True si ya está pagada (idempotencia)
+        self.mock_bill_repo.update.assert_not_called()
+        
+    def test_pay_invoice_not_found_raises_error(self):
+        # Arrange
+        invoice_id = 999
+        self.mock_bill_repo.get_by_id.return_value = None
+        
+        # Act & Assert
+        with pytest.raises(ValueError, match="Factura ID 999 no encontrada."):
+            self.service.pay_invoice(invoice_id)
+            
+        self.mock_bill_repo.update.assert_not_called()
     # ----------------------------------------------------
     # SEED DATA (Prueba de inicialización de datos)
     # ----------------------------------------------------

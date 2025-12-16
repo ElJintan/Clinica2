@@ -1,7 +1,11 @@
-from typing import List, Optional, Any  
+from typing import List, Optional, Any
 from src.interfaces import IRepository
-from src.models import Client, Pet, Appointment, MedicalRecord
+from src.models import Client, Pet, Appointment, MedicalRecord, Invoice # Importación completa
 from src.database import DatabaseManager
+from src.utils import logger
+from datetime import date, datetime
+
+# --- Client Repository ---
 
 class ClientRepository(IRepository):
     def __init__(self, db: DatabaseManager):
@@ -22,30 +26,29 @@ class ClientRepository(IRepository):
             rows = cursor.fetchall()
             return [Client(*row) for row in rows]
 
-    def update(self, client: Client) -> bool:
+    def update(self, item: Any) -> bool: # item: Any para cumplir con IRepository
+        client = item # Casteamos el Any a Client
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("UPDATE clients SET name=?, email=?, phone=? WHERE id=?", 
                            (client.name, client.email, client.phone, client.id))
             return cursor.rowcount > 0
 
-    def delete(self, id: int) -> bool:
+    def delete(self, item_id: int) -> bool:
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("DELETE FROM clients WHERE id=?", (id,))
+            cursor.execute("DELETE FROM clients WHERE id=?", (item_id,))
             return cursor.rowcount > 0
             
-    def get_by_id(self, id: int) -> Optional[Client]:
+    def get_by_id(self, item_id: int) -> Any: # Retorna Any para cumplir con IRepository
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT id, name, email, phone FROM clients WHERE id=?", (id,))
+            cursor.execute("SELECT id, name, email, phone FROM clients WHERE id=?", (item_id,))
             row = cursor.fetchone()
             return Client(*row) if row else None
-    
-    # Para cumplir con la interfaz, añadimos este método genérico aunque usemos get_by_id específico arriba
-    def get_by_id_generic(self, item_id: int) -> Any:
-        return self.get_by_id(item_id)
 
+
+# --- Pet Repository ---
 
 class PetRepository(IRepository):
     def __init__(self, db: DatabaseManager):
@@ -71,27 +74,29 @@ class PetRepository(IRepository):
             cursor.execute("SELECT id, name, species, breed, age, client_id FROM pets WHERE client_id=?", (client_id,))
             return [Pet(*row) for row in cursor.fetchall()]
 
-    # src/repositories.py (dentro de la clase PetRepository)
-
-    def update(self, pet: Pet) -> bool: 
+    def update(self, item: Any) -> bool: # item: Any para cumplir con IRepository
+        pet = item
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("UPDATE pets SET name=?, species=?, breed=?, age=?, client_id=? WHERE id=?", 
                            (pet.name, pet.species, pet.breed, pet.age, pet.client_id, pet.id))
-            return cursor.rowcount > 0
+            return cursor.rowcount > 0 
 
     def delete(self, item_id: int) -> bool: 
         with self.db.get_connection() as conn:
-            conn.execute("DELETE FROM pets WHERE id=?", (item_id,))
-            return True
-
-    def get_by_id(self, item_id: int) -> Any: 
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM pets WHERE id=?", (item_id,))
+            return cursor.rowcount > 0
+            
+    def get_by_id(self, item_id: int) -> Any: # Retorna Any para cumplir con IRepository
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT id, name, species, breed, age, client_id FROM pets WHERE id=?", (item_id,))
             row = cursor.fetchone()
-            # Retorna el objeto Pet si se encuentra, o None si no.
             return Pet(*row) if row else None
+
+
+# --- Appointment Repository ---
 
 class AppointmentRepository(IRepository):
     def __init__(self, db: DatabaseManager):
@@ -104,37 +109,36 @@ class AppointmentRepository(IRepository):
                            (appt.pet_id, appt.date, appt.reason, appt.status))
             appt.id = cursor.lastrowid
             return appt
-
+            
     def get_all(self) -> List[Appointment]:
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT id, pet_id, date, reason, status FROM appointments")
             return [Appointment(*row) for row in cursor.fetchall()]
 
-    def update(self, appt: Appointment) -> bool:
+    def update(self, item: Any) -> bool: # item: Any para cumplir con IRepository
+        appt = item
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("UPDATE appointments SET pet_id=?, date=?, reason=?, status=? WHERE id=?",
                            (appt.pet_id, appt.date, appt.reason, appt.status, appt.id))
             return cursor.rowcount > 0
-            
-    def delete(self, item_id: int) -> bool:
-        """Elimina una cita por su ID."""
+
+    def delete(self, item_id: int) -> bool: # item_id: int para cumplir con IRepository
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
-            # Ejecuta la sentencia DELETE
             cursor.execute("DELETE FROM appointments WHERE id=?", (item_id,))
-            # Devuelve True si se eliminó al menos una fila (rowcount > 0)
             return cursor.rowcount > 0
-
-    def get_by_id(self, item_id: int) -> Any:
+            
+    def get_by_id(self, item_id: int) -> Any: # Retorna Any para cumplir con IRepository
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT id, pet_id, date, reason, status FROM appointments WHERE id=?", (item_id,))
             row = cursor.fetchone()
-            # Retorna el objeto Appointment si se encuentra, o None si no.
             return Appointment(*row) if row else None
 
+
+# --- Medical Record Repository ---
 
 class MedicalRecordRepository(IRepository):
     def __init__(self, db: DatabaseManager):
@@ -161,11 +165,69 @@ class MedicalRecordRepository(IRepository):
                 ORDER BY a.date DESC
             """
             cursor.execute(query, (pet_id,))
-            # Retorna una lista de tuplas (id_registro, fecha_cita, motivo, diagnostico, tratamiento, notas)
             return cursor.fetchall() 
             
-    # Métodos IRepository (Implementación mínima o 'pass')
-    def get_all(self) -> List[Any]: pass
-    def update(self, item: Any) -> bool: pass
-    def delete(self, item_id: int) -> bool: pass
-    def get_by_id(self, item_id: int) -> Any: pass
+    # Métodos IRepository (Implementación mínima para cumplir con la interfaz)
+    def get_all(self) -> List[Any]: 
+        return [] 
+        
+    def update(self, item: Any) -> bool: 
+        return False
+        
+    def delete(self, item_id: int) -> bool: 
+        return False
+        
+    def get_by_id(self, item_id: int) -> Any: 
+        return None
+
+# --- Billing Repository ---
+
+class BillingRepository(IRepository):
+    def __init__(self, db: DatabaseManager):
+        self.db = db
+
+    def create(self, invoice: Invoice) -> Invoice:
+        # ... (código existente)
+        pass # Mantener la implementación original o completa
+        
+    def get_all(self) -> List[Invoice]:
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, client_id, date, total_amount, status FROM invoices ORDER BY date DESC")
+            
+            # CORRECCIÓN: Convertir la cadena de fecha (índice 2) a objeto date
+            invoices = []
+            for row in cursor.fetchall():
+                # row[2] es la cadena de fecha ('YYYY-MM-DD')
+                date_obj = datetime.strptime(row[2], '%Y-%m-%d').date()
+                invoices.append(Invoice(row[0], row[1], date_obj, row[3], row[4]))
+            return invoices
+
+    def update(self, item: Any) -> bool: 
+        # ... (código update existente)
+        pass
+
+    def delete(self, item_id: int) -> bool: 
+        return False
+        
+    def get_by_id(self, item_id: int) -> Any:
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, client_id, date, total_amount, status FROM invoices WHERE id=?", (item_id,))
+            row = cursor.fetchone()
+            
+            if row:
+                # CORRECCIÓN: Conversión de fecha si se encuentra la fila
+                date_obj = datetime.strptime(row[2], '%Y-%m-%d').date()
+                return Invoice(row[0], row[1], date_obj, row[3], row[4])
+            return None
+
+    # Métodos IRepository (Implementación mínima para cumplir con la interfaz)
+    def update(self, item: Any) -> bool: 
+        return False
+        
+    def delete(self, item_id: int) -> bool: 
+        return False
+        
+    def get_by_id(self, item_id: int) -> Any: 
+        return None

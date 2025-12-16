@@ -63,6 +63,19 @@ class DatabaseManager:
                         FOREIGN KEY(appointment_id) REFERENCES appointments(id) ON DELETE CASCADE
                     )
                 ''')
+
+                # Tabla Facturas (NUEVA)
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS invoices (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        client_id INTEGER,
+                        date DATE NOT NULL,
+                        total_amount REAL NOT NULL,
+                        status TEXT NOT NULL,
+                        FOREIGN KEY(client_id) REFERENCES clients(id) ON DELETE CASCADE
+                    )
+                ''')
+                
                 logger.info(f"Base de datos inicializada en: {self.db_name}")
         except Exception as e:
             logger.error(f"Error inicializando DB: {e}")

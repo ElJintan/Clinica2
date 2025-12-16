@@ -1,14 +1,15 @@
 from typing import List, Optional
-from src.repositories import ClientRepository, PetRepository, AppointmentRepository, MedicalRecordRepository
-from src.models import Client, Pet, Appointment, MedicalRecord
+from src.repositories import ClientRepository, PetRepository, AppointmentRepository, MedicalRecordRepository, BillingRepository
+from src.models import Client, Pet, Appointment, MedicalRecord, Invoice
 from src.utils import logger, Validators
 
 class ClinicService:
-    def __init__(self, client_repo: ClientRepository, pet_repo: PetRepository, appt_repo: AppointmentRepository, mr_repo: MedicalRecordRepository):
+    def __init__(self, client_repo: ClientRepository, pet_repo: PetRepository, appt_repo: AppointmentRepository, mr_repo: MedicalRecordRepository, bill_repo: BillingRepository):
         self.client_repo = client_repo
         self.pet_repo = pet_repo
         self.appt_repo = appt_repo
-        self.mr_repo = mr_repo 
+        self.mr_repo = mr_repo
+        self.bill_repo = bill_repo
 
     # --- Client Logic ---
     def add_client(self, name: str, email: str, phone: str) -> Client:
@@ -106,6 +107,44 @@ class ClinicService:
         """Obtiene el historial médico completo para una mascota."""
         return self.mr_repo.get_medical_history_by_pet(pet_id)
         
+        # --- Billing Logic ---
+    def generate_invoice(self, client_id: int, total_amount: float, date_val) -> Invoice:
+        """Genera una nueva factura para un cliente."""
+        if total_amount <= 0:
+            raise ValueError("El monto total debe ser positivo.")
+        
+        invoice = Invoice(id=None, client_id=client_id, date=date_val, total_amount=total_amount, status="Pendiente")
+        return self.bill_repo.create(invoice)
+    
+    def get_invoice_by_id(self, invoice_id: int) -> Optional[Invoice]:
+        return self.bill_repo.get_by_id(invoice_id)
+
+    def pay_invoice(self, invoice_id: int) -> bool:
+        """Marca una factura como 'Pagada'."""
+        
+        # DEBUG: Print del ID y su tipo justo al inicio del servicio
+        print(f"--- DEBUG SERVICE: pay_invoice llamado con ID: {invoice_id}, Tipo: {type(invoice_id)} ---") 
+
+        invoice = self.bill_repo.get_by_id(invoice_id)
+        
+        if not invoice:
+            # Esta línea se ejecuta cuando el repositorio devuelve None
+            raise ValueError(f"Factura ID {invoice_id} no encontrada.")
+            
+        if invoice.status == "Pagada":
+            # Si ya está pagada, consideramos que la operación es exitosa (idempotente)
+            return True 
+            
+        invoice.status = "Pagada"
+        
+        # Llama al repositorio para actualizar el estado
+        return self.bill_repo.update(invoice)
+
+
+    def list_invoices(self) -> List[Invoice]:
+        """Lista todas las facturas."""
+        return self.bill_repo.get_all()
+    
     # --- Seed Data ---
     def seed_data(self):
         if not self.list_clients():

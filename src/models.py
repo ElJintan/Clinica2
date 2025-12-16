@@ -33,3 +33,11 @@ class MedicalRecord:
     diagnosis: str
     treatment: str
     notes: Optional[str] = None
+
+@dataclass
+class Invoice:
+    id: Optional[int]
+    client_id: int
+    date: date
+    total_amount: float
+    status: str = "Pendiente"

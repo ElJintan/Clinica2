@@ -5,4 +5,8 @@ services:
     ports:
       - "8501:8501"
     volumes:
+      # Sincroniza el código fuente
       - .:/app
+      # Asegura que la base de datos (que se crea en /app/veterinaria_final.db) sea persistente
+      # El archivo se guardará en la raíz de tu proyecto local (clinica2/veterinaria_final.db)
+      - ./veterinaria_final.db:/app/veterinaria_final.db
