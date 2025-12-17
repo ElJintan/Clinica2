@@ -6,17 +6,39 @@ class DatabaseManager:
     """Manejo de conexión a SQLite."""
     
     def __init__(self, db_name="veterinaria_final.db"):
-        # Construimos la ruta absoluta para evitar ambigüedades
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self.db_name = os.path.join(base_dir, db_name)
+        self._conn_cache = None # Variable para guardar la conexión en memoria
+        
+        # Detectar si es una base de datos en memoria (para tests)
+        if db_name == ":memory:":
+            self.db_name = ":memory:"
+            self.is_memory = True
+        else:
+            # Construimos la ruta absoluta para bases de datos en archivo
+            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            self.db_name = os.path.join(base_dir, db_name)
+            self.is_memory = False
 
     def get_connection(self):
-        # check_same_thread=False es necesario para Streamlit
+        # check_same_thread=False es necesario para Streamlit y tests
+        
+        # LÓGICA ESPECIAL PARA MEMORIA (TESTS)
+        if self.is_memory:
+            # Si ya tenemos una conexión abierta, la reutilizamos (Singleton)
+            # Esto evita que la base de datos se borre entre initialize_db y el test
+            if self._conn_cache is None:
+                self._conn_cache = sqlite3.connect(self.db_name, check_same_thread=False)
+            return self._conn_cache
+            
+        # LÓGICA NORMAL (ARCHIVO)
+        # Siempre devolvemos una conexión nueva
         return sqlite3.connect(self.db_name, check_same_thread=False)
 
     def initialize_db(self):
         """Crea las tablas si no existen."""
         try:
+            # Usamos get_connection. Si es memoria, usará la cacheada.
+            # Nota: El 'with' en sqlite3 hace commit/rollback, pero NO cierra la conexión automáticamente,
+            # lo cual es perfecto para nuestro caso de memoria.
             with self.get_connection() as conn:
                 cursor = conn.cursor()
                 
